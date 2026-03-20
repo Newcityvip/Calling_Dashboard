@@ -1,4 +1,4 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbwPOqXdn8cq35Aw9YbYwx18fj6BNLlN2mZdGWM9HXNthcgi9WgqWznIAoWHKKaj0jm4Iw/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbzUUGot06FiTa3kATniBwn37S2gobyZWviZohIu9igNIvkUFH5XAZBHM6H5EGdi_yuIVA/exec";
 
 const STATUS_OPTIONS = [
   "Pending",
@@ -58,10 +58,24 @@ async function postData(payload) {
     headers: {
       "Content-Type": "text/plain;charset=utf-8"
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    redirect: "follow"
   });
 
-  return await res.json();
+  const text = await res.text();
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`Non-JSON response: ${text.slice(0, 300)}`);
+  }
+
+  if (!res.ok) {
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+
+  return data;
 }
 
 function setMessage(el, text, type = "info") {
@@ -100,6 +114,7 @@ async function handleLogin() {
     return;
   }
 
+  loginBtn.disabled = true;
   setMessage(loginMsg, "Logging in...", "info");
 
   try {
@@ -131,7 +146,10 @@ async function handleLogin() {
       await loadStaffTasks();
     }
   } catch (err) {
+    console.error("Login error:", err);
     setMessage(loginMsg, `Login failed: ${err.message}`, "error");
+  } finally {
+    loginBtn.disabled = false;
   }
 }
 
@@ -146,6 +164,7 @@ async function handleUploadAndDistribute() {
     return;
   }
 
+  processBtn.disabled = true;
   setMessage(uploadMsg, "Reading Excel file...", "info");
 
   try {
@@ -170,7 +189,11 @@ async function handleUploadAndDistribute() {
     if (res.success) {
       setMessage(
         uploadMsg,
-        `Upload complete. Total rows: ${res.total} | After duplicate cleanup: ${res.cleaned}`,
+        `Upload complete.
+Total rows: ${res.total}
+After duplicate cleanup: ${res.cleaned}
+Duplicates removed: ${res.duplicatesRemoved}
+Batch ID: ${res.batchId}`,
         "success"
       );
       excelFileInput.value = "";
@@ -178,7 +201,10 @@ async function handleUploadAndDistribute() {
       setMessage(uploadMsg, res.error || "Upload failed.", "error");
     }
   } catch (err) {
+    console.error("Upload error:", err);
     setMessage(uploadMsg, `Upload failed: ${err.message}`, "error");
+  } finally {
+    processBtn.disabled = false;
   }
 }
 
@@ -232,6 +258,7 @@ function pickField(row, keys) {
 async function loadStaffTasks() {
   if (!currentUser || currentUser.role === "Admin") return;
 
+  refreshTasksBtn.disabled = true;
   setMessage(staffMsg, "Loading tasks...", "info");
 
   try {
@@ -244,7 +271,10 @@ async function loadStaffTasks() {
     renderTasks();
     setMessage(staffMsg, `Loaded ${currentTasks.length} tasks.`, "success");
   } catch (err) {
+    console.error("Load tasks error:", err);
     setMessage(staffMsg, `Failed to load tasks: ${err.message}`, "error");
+  } finally {
+    refreshTasksBtn.disabled = false;
   }
 }
 
@@ -293,7 +323,7 @@ function renderTasks() {
             <textarea class="remark-input" data-task-id="${escapeHtml(task.id)}" placeholder="Enter note...">${escapeHtml(task.remark || "")}</textarea>
           </td>
           <td>
-            <button class="save-btn" onclick="saveTask('${escapeJs(task.id)}')">Save</button>
+            <button class="save-btn" onclick="saveTask('${escapeJs(task.id)}', this)">Save</button>
           </td>
         </tr>
       `;
@@ -301,7 +331,7 @@ function renderTasks() {
     .join("");
 }
 
-async function saveTask(taskId) {
+async function saveTask(taskId, btn) {
   const statusEl = document.querySelector(`.status-select[data-task-id="${cssEscape(taskId)}"]`);
   const remarkEl = document.querySelector(`.remark-input[data-task-id="${cssEscape(taskId)}"]`);
 
@@ -310,6 +340,7 @@ async function saveTask(taskId) {
   const status = statusEl.value;
   const remark = remarkEl.value.trim();
 
+  if (btn) btn.disabled = true;
   setMessage(staffMsg, "Saving update...", "info");
 
   try {
@@ -332,13 +363,17 @@ async function saveTask(taskId) {
       setMessage(staffMsg, res.error || "Update failed.", "error");
     }
   } catch (err) {
+    console.error("Save task error:", err);
     setMessage(staffMsg, `Update failed: ${err.message}`, "error");
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
 async function handleExport() {
   if (!currentUser || currentUser.role !== "Admin") return;
 
+  exportBtn.disabled = true;
   setMessage(exportMsg, "Preparing export...", "info");
 
   try {
@@ -354,7 +389,10 @@ async function handleExport() {
     downloadCSV(res.data, "assigned_tasks_report.csv");
     setMessage(exportMsg, "Report downloaded successfully.", "success");
   } catch (err) {
+    console.error("Export error:", err);
     setMessage(exportMsg, `Export failed: ${err.message}`, "error");
+  } finally {
+    exportBtn.disabled = false;
   }
 }
 
