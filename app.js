@@ -1,4 +1,4 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbwp07rc4VwCsEAgn6fiM_wRE8fy-8CkAp8dNa68KRE4EOg0yUqOvIiFwErir0nRPTXgnQ/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbz_xO3uPOIfGhbA1Rs4Vk5hnnJZb_DApl0haVJYLGxeZSnqyoO301PohtRk-Iuq1HOHtg/exec";
 
 const STATUS_OPTIONS = [
   "Pending",
@@ -26,6 +26,7 @@ const loginMsg = document.getElementById("loginMsg");
 const adminName = document.getElementById("adminName");
 const processBtn = document.getElementById("processBtn");
 const teamGroupSelect = document.getElementById("teamGroup");
+const brandNameInput = document.getElementById("brandName");
 const excelFileInput = document.getElementById("excelFile");
 const uploadMsg = document.getElementById("uploadMsg");
 
@@ -114,6 +115,7 @@ function logout() {
 
   clearBatchIdInput.value = "";
   excelFileInput.value = "";
+  brandNameInput.value = "";
 }
 
 async function handleLogin() {
@@ -168,6 +170,12 @@ async function handleUploadAndDistribute() {
 
   const file = excelFileInput.files[0];
   const group = teamGroupSelect.value;
+  const brandName = brandNameInput.value.trim();
+
+  if (!brandName) {
+    setMessage(uploadMsg, "Please enter the brand name.", "error");
+    return;
+  }
 
   if (!file) {
     setMessage(uploadMsg, "Please choose an Excel file first.", "error");
@@ -192,6 +200,7 @@ async function handleUploadAndDistribute() {
       action: "uploadAndDistribute",
       code: currentUser.code,
       group,
+      brandName,
       fileName: file.name,
       records
     });
@@ -203,6 +212,7 @@ async function handleUploadAndDistribute() {
       setMessage(
         uploadMsg,
         `Upload complete.
+Brand: ${res.brandName}
 Total rows: ${res.total}
 After duplicate cleanup: ${res.cleaned}
 Duplicates removed: ${res.duplicatesRemoved}
@@ -362,6 +372,7 @@ function renderTasks() {
   const filtered = currentTasks.filter((task) => {
     const matchesSearch =
       !q ||
+      String(task.brandName || "").toLowerCase().includes(q) ||
       String(task.username || "").toLowerCase().includes(q) ||
       String(task.email || "").toLowerCase().includes(q) ||
       String(task.phone || "").toLowerCase().includes(q);
@@ -374,7 +385,7 @@ function renderTasks() {
   taskCount.textContent = `${filtered.length} Tasks`;
 
   if (!filtered.length) {
-    taskTableBody.innerHTML = `<tr><td colspan="7" class="empty-cell">No matching tasks found.</td></tr>`;
+    taskTableBody.innerHTML = `<tr><td colspan="8" class="empty-cell">No matching tasks found.</td></tr>`;
     return;
   }
 
@@ -387,6 +398,7 @@ function renderTasks() {
 
       return `
         <tr>
+          <td>${escapeHtml(task.brandName || "")}</td>
           <td>${escapeHtml(task.username || "")}</td>
           <td>${escapeHtml(task.email || "")}</td>
           <td>${escapeHtml(task.regTime || "")}</td>
