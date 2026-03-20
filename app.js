@@ -1,4 +1,4 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbzUUGot06FiTa3kATniBwn37S2gobyZWviZohIu9igNIvkUFH5XAZBHM6H5EGdi_yuIVA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwp07rc4VwCsEAgn6fiM_wRE8fy-8CkAp8dNa68KRE4EOg0yUqOvIiFwErir0nRPTXgnQ/exec";
 
 const STATUS_OPTIONS = [
   "Pending",
@@ -32,6 +32,10 @@ const uploadMsg = document.getElementById("uploadMsg");
 const exportBtn = document.getElementById("exportBtn");
 const exportMsg = document.getElementById("exportMsg");
 
+const clearBatchBtn = document.getElementById("clearBatchBtn");
+const clearBatchIdInput = document.getElementById("clearBatchId");
+const clearMsg = document.getElementById("clearMsg");
+
 const taskTableBody = document.getElementById("taskTableBody");
 const taskCount = document.getElementById("taskCount");
 const staffTitle = document.getElementById("staffTitle");
@@ -44,6 +48,7 @@ loginBtn.addEventListener("click", handleLogin);
 logoutBtn.addEventListener("click", logout);
 processBtn.addEventListener("click", handleUploadAndDistribute);
 exportBtn.addEventListener("click", handleExport);
+clearBatchBtn.addEventListener("click", handleClearBatch);
 refreshTasksBtn.addEventListener("click", loadStaffTasks);
 searchInput.addEventListener("input", renderTasks);
 statusFilter.addEventListener("change", renderTasks);
@@ -100,10 +105,15 @@ function logout() {
   adminView.classList.add("hidden");
   staffView.classList.add("hidden");
   logoutBtn.classList.add("hidden");
+
   setMessage(loginMsg, "", "info");
   setMessage(uploadMsg, "", "info");
   setMessage(staffMsg, "", "info");
   setMessage(exportMsg, "", "info");
+  setMessage(clearMsg, "", "info");
+
+  clearBatchIdInput.value = "";
+  excelFileInput.value = "";
 }
 
 async function handleLogin() {
@@ -187,15 +197,19 @@ async function handleUploadAndDistribute() {
     });
 
     if (res.success) {
+      const batchId = res.batchId || "";
+      clearBatchIdInput.value = batchId;
+
       setMessage(
         uploadMsg,
         `Upload complete.
 Total rows: ${res.total}
 After duplicate cleanup: ${res.cleaned}
 Duplicates removed: ${res.duplicatesRemoved}
-Batch ID: ${res.batchId}`,
+Batch ID: ${batchId}`,
         "success"
       );
+
       excelFileInput.value = "";
     } else {
       setMessage(uploadMsg, res.error || "Upload failed.", "error");
@@ -205,6 +219,50 @@ Batch ID: ${res.batchId}`,
     setMessage(uploadMsg, `Upload failed: ${err.message}`, "error");
   } finally {
     processBtn.disabled = false;
+  }
+}
+
+async function handleClearBatch() {
+  if (!currentUser || currentUser.role !== "Admin") return;
+
+  const batchId = clearBatchIdInput.value.trim();
+
+  if (!batchId) {
+    setMessage(clearMsg, "Please enter a Batch ID.", "error");
+    return;
+  }
+
+  const ok = window.confirm(`Are you sure you want to clear batch: ${batchId} ?`);
+  if (!ok) return;
+
+  clearBatchBtn.disabled = true;
+  setMessage(clearMsg, "Clearing batch...", "info");
+
+  try {
+    const res = await postData({
+      action: "clearBatch",
+      code: currentUser.code,
+      batchId
+    });
+
+    if (res.success) {
+      setMessage(
+        clearMsg,
+        `Batch cleared successfully.
+Batch ID: ${res.batchId}
+Deleted from assigned_tasks: ${res.deleted.assigned_tasks}
+Deleted from status_logs: ${res.deleted.status_logs}
+Deleted from upload_batches: ${res.deleted.upload_batches}`,
+        "success"
+      );
+    } else {
+      setMessage(clearMsg, res.error || "Batch clear failed.", "error");
+    }
+  } catch (err) {
+    console.error("Clear batch error:", err);
+    setMessage(clearMsg, `Batch clear failed: ${err.message}`, "error");
+  } finally {
+    clearBatchBtn.disabled = false;
   }
 }
 
@@ -235,13 +293,13 @@ function mapRowsToRecords(rows) {
     .map((row) => {
       const username = pickField(row, ["Affiliate Username", "affiliate username", "AffiliateUsername"]);
       const email = pickField(row, ["Email", "email"]);
-      const regTime = pickField(row, ["Registration Time", "registration time", "RegistrationTime"]);
+      const regTimeRaw = pickField(row, ["Registration Time", "registration time", "RegistrationTime"]);
       const phone = pickField(row, ["Phone Number", "phone number", "PhoneNumber"]);
 
       return {
         username: String(username || "").trim(),
         email: String(email || "").trim(),
-        regTime: String(regTime || "").trim(),
+        regTime: formatRegistrationTime(regTimeRaw),
         phone: String(phone || "").trim()
       };
     })
@@ -253,6 +311,25 @@ function pickField(row, keys) {
     if (row[key] !== undefined) return row[key];
   }
   return "";
+}
+
+function formatRegistrationTime(value) {
+  if (value === null || value === undefined || value === "") return "";
+
+  if (typeof value === "number") {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (parsed) {
+      const yyyy = parsed.y;
+      const mm = String(parsed.m).padStart(2, "0");
+      const dd = String(parsed.d).padStart(2, "0");
+      const hh = String(parsed.H || 0).padStart(2, "0");
+      const min = String(parsed.M || 0).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
+    }
+  }
+
+  const str = String(value).trim();
+  return str;
 }
 
 async function loadStaffTasks() {
