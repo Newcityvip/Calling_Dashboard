@@ -9,6 +9,7 @@
   --success: #15803d;
   --success-dark: #166534;
   --danger: #dc2626;
+  --danger-dark: #b91c1c;
   --warning: #b45309;
   --shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
   --radius: 16px;
@@ -166,6 +167,15 @@ textarea {
   border: 1px solid var(--border);
 }
 
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: var(--danger-dark);
+}
+
 .hidden {
   display: none !important;
 }
@@ -174,6 +184,7 @@ textarea {
   margin-top: 14px;
   font-size: 14px;
   min-height: 20px;
+  white-space: pre-wrap;
 }
 
 .message.success {
@@ -305,6 +316,12 @@ th {
 
 .save-btn:hover {
   background: var(--primary-dark);
+}
+
+.btn:disabled,
+.save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 @media (max-width: 980px) {
