@@ -53,6 +53,11 @@
               </div>
 
               <div class="field">
+                <label for="brandName">Brand Name</label>
+                <input type="text" id="brandName" placeholder="Example: B3, B4, B5, J1" />
+              </div>
+
+              <div class="field">
                 <label for="excelFile">Excel File (.xlsx)</label>
                 <input type="file" id="excelFile" accept=".xlsx,.xls" />
               </div>
@@ -151,7 +156,7 @@
           </div>
 
           <div class="toolbar">
-            <input type="text" id="searchInput" placeholder="Search by username, email, phone..." />
+            <input type="text" id="searchInput" placeholder="Search by username, email, phone, brand..." />
             <select id="statusFilter">
               <option value="">All Status</option>
               <option value="Pending">Pending</option>
@@ -170,6 +175,7 @@
             <table id="taskTable">
               <thead>
                 <tr>
+                  <th>Brand</th>
                   <th>Affiliate Username</th>
                   <th>Email</th>
                   <th>Registration Time</th>
@@ -181,7 +187,7 @@
               </thead>
               <tbody id="taskTableBody">
                 <tr>
-                  <td colspan="7" class="empty-cell">No tasks loaded yet.</td>
+                  <td colspan="8" class="empty-cell">No tasks loaded yet.</td>
                 </tr>
               </tbody>
             </table>
