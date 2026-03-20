@@ -25,7 +25,7 @@
         <div class="form-grid single">
           <div class="field">
             <label for="staffCode">Staff Code</label>
-            <input type="text" id="staffCode" placeholder="Example: AKM01 or ADMIN01" />
+            <input type="text" id="staffCode" placeholder="" autocomplete="off" />
           </div>
         </div>
 
@@ -99,6 +99,26 @@
           </div>
 
           <div class="card">
+            <h2>Clear Wrong Batch</h2>
+            <p class="muted">If you distributed the wrong file to the wrong team, enter the Batch ID and clear it.</p>
+
+            <div class="form-grid single">
+              <div class="field">
+                <label for="clearBatchId">Batch ID</label>
+                <input type="text" id="clearBatchId" placeholder="Paste batch ID here" />
+              </div>
+            </div>
+
+            <div class="actions">
+              <button id="clearBatchBtn" class="btn btn-danger">Clear This Batch</button>
+            </div>
+
+            <div id="clearMsg" class="message"></div>
+          </div>
+        </div>
+
+        <div class="grid two-col">
+          <div class="card">
             <h2>Upload Rules</h2>
             <ul class="clean-list">
               <li>Only these columns are used: Affiliate Username, Email, Registration Time, Phone Number</li>
@@ -106,6 +126,11 @@
               <li>Duplicates are removed only inside the uploaded file</li>
               <li>Records are distributed equally to selected group staff</li>
             </ul>
+          </div>
+
+          <div class="card">
+            <h2>Batch Tip</h2>
+            <p class="muted">After every successful upload, the Batch ID will be shown. Keep that ID if you ever need to reverse that upload.</p>
           </div>
         </div>
       </section>
