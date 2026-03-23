@@ -72,6 +72,16 @@
                 <label for="excelFile">Excel File (.xlsx)</label>
                 <input type="file" id="excelFile" accept=".xlsx,.xls" />
               </div>
+
+              <div class="field field-full">
+                <label>Distribute To (optional)</label>
+                <p class="muted small-text">Leave all unchecked to distribute equally to the full selected team. Select one or more staff to distribute only among them.</p>
+                <div class="staff-target-actions">
+                  <button type="button" id="selectAllTargetStaffBtn" class="btn btn-outline btn-small">Select All</button>
+                  <button type="button" id="clearTargetStaffBtn" class="btn btn-outline btn-small">Clear</button>
+                </div>
+                <div id="targetStaffList" class="target-staff-list"></div>
+              </div>
             </div>
 
             <div class="actions">
@@ -185,7 +195,7 @@
               <li>Only these columns are used: Affiliate Username, Email, Registration Time, Phone Number</li>
               <li>Duplicate removal is by Phone Number only</li>
               <li>Duplicates are removed only inside the uploaded file</li>
-              <li>Records are distributed equally to selected group staff</li>
+              <li>Records are distributed equally to selected group staff or only to selected staff if chosen</li>
             </ul>
           </div>
 
