@@ -13,6 +13,8 @@ const STATUS_OPTIONS = [
 
 let currentUser = null;
 let currentTasks = [];
+let statusChart = null;
+let staffChart = null;
 
 const loginView = document.getElementById("loginView");
 const adminView = document.getElementById("adminView");
@@ -37,6 +39,21 @@ const clearBatchBtn = document.getElementById("clearBatchBtn");
 const clearBatchIdInput = document.getElementById("clearBatchId");
 const clearMsg = document.getElementById("clearMsg");
 
+const refreshSummaryBtn = document.getElementById("refreshSummaryBtn");
+const summaryMsg = document.getElementById("summaryMsg");
+const staffPercentGrid = document.getElementById("staffPercentGrid");
+
+const sumTotal = document.getElementById("sumTotal");
+const sumPending = document.getElementById("sumPending");
+const sumCompleted = document.getElementById("sumCompleted");
+const sumUpdated = document.getElementById("sumUpdated");
+const sumNoAnswer = document.getElementById("sumNoAnswer");
+const sumNotReachable = document.getElementById("sumNotReachable");
+const sumCallBackLater = document.getElementById("sumCallBackLater");
+const sumWrongNumber = document.getElementById("sumWrongNumber");
+const sumInterested = document.getElementById("sumInterested");
+const sumNotInterested = document.getElementById("sumNotInterested");
+
 const taskTableBody = document.getElementById("taskTableBody");
 const taskCount = document.getElementById("taskCount");
 const staffTitle = document.getElementById("staffTitle");
@@ -50,6 +67,7 @@ logoutBtn.addEventListener("click", logout);
 processBtn.addEventListener("click", handleUploadAndDistribute);
 exportBtn.addEventListener("click", handleExport);
 clearBatchBtn.addEventListener("click", handleClearBatch);
+refreshSummaryBtn.addEventListener("click", loadAdminSummary);
 refreshTasksBtn.addEventListener("click", loadStaffTasks);
 searchInput.addEventListener("input", renderTasks);
 statusFilter.addEventListener("change", renderTasks);
@@ -112,10 +130,21 @@ function logout() {
   setMessage(staffMsg, "", "info");
   setMessage(exportMsg, "", "info");
   setMessage(clearMsg, "", "info");
+  setMessage(summaryMsg, "", "info");
 
   clearBatchIdInput.value = "";
   excelFileInput.value = "";
   brandNameInput.value = "";
+  staffPercentGrid.innerHTML = `<div class="empty-percent">No data yet.</div>`;
+
+  if (statusChart) {
+    statusChart.destroy();
+    statusChart = null;
+  }
+  if (staffChart) {
+    staffChart.destroy();
+    staffChart = null;
+  }
 }
 
 async function handleLogin() {
@@ -152,6 +181,7 @@ async function handleLogin() {
     if (res.role === "Admin") {
       adminName.textContent = `${res.name} (${code})`;
       showView(adminView);
+      await loadAdminSummary();
     } else {
       staffTitle.textContent = `${res.name} - My Assigned Tasks`;
       showView(staffView);
@@ -221,6 +251,7 @@ Batch ID: ${batchId}`,
       );
 
       excelFileInput.value = "";
+      await loadAdminSummary();
     } else {
       setMessage(uploadMsg, res.error || "Upload failed.", "error");
     }
@@ -265,6 +296,7 @@ Deleted from status_logs: ${res.deleted.status_logs}
 Deleted from upload_batches: ${res.deleted.upload_batches}`,
         "success"
       );
+      await loadAdminSummary();
     } else {
       setMessage(clearMsg, res.error || "Batch clear failed.", "error");
     }
@@ -274,6 +306,147 @@ Deleted from upload_batches: ${res.deleted.upload_batches}`,
   } finally {
     clearBatchBtn.disabled = false;
   }
+}
+
+async function loadAdminSummary() {
+  if (!currentUser || currentUser.role !== "Admin") return;
+
+  refreshSummaryBtn.disabled = true;
+  setMessage(summaryMsg, "Loading live report...", "info");
+
+  try {
+    const res = await postData({
+      action: "getAdminSummary",
+      code: currentUser.code
+    });
+
+    if (!res.success) {
+      setMessage(summaryMsg, res.error || "Failed to load summary.", "error");
+      return;
+    }
+
+    const s = res.summary || {};
+    sumTotal.textContent = s.total || 0;
+    sumPending.textContent = s.pending || 0;
+    sumCompleted.textContent = s.completed || 0;
+    sumUpdated.textContent = s.updated || 0;
+    sumNoAnswer.textContent = s.noAnswer || 0;
+    sumNotReachable.textContent = s.notReachable || 0;
+    sumCallBackLater.textContent = s.callBackLater || 0;
+    sumWrongNumber.textContent = s.wrongNumber || 0;
+    sumInterested.textContent = s.interested || 0;
+    sumNotInterested.textContent = s.notInterested || 0;
+
+    renderStatusChart(s);
+    renderStaffChart(res.staffBreakdown || {});
+    renderStaffPercentCards(res.staffBreakdown || {});
+    setMessage(summaryMsg, "Live report updated.", "success");
+  } catch (err) {
+    console.error("Summary error:", err);
+    setMessage(summaryMsg, `Failed to load summary: ${err.message}`, "error");
+  } finally {
+    refreshSummaryBtn.disabled = false;
+  }
+}
+
+function renderStatusChart(s) {
+  const ctx = document.getElementById("statusChart");
+
+  if (statusChart) statusChart.destroy();
+
+  statusChart = new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: [
+        "Pending",
+        "Completed",
+        "No Answer",
+        "Not Reachable",
+        "Call Back Later",
+        "Wrong Number",
+        "Interested",
+        "Not Interested"
+      ],
+      datasets: [{
+        data: [
+          s.pending || 0,
+          s.completed || 0,
+          s.noAnswer || 0,
+          s.notReachable || 0,
+          s.callBackLater || 0,
+          s.wrongNumber || 0,
+          s.interested || 0,
+          s.notInterested || 0
+        ]
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  });
+}
+
+function renderStaffChart(staffBreakdown) {
+  const ctx = document.getElementById("staffChart");
+
+  if (staffChart) staffChart.destroy();
+
+  const names = Object.keys(staffBreakdown);
+  const totals = names.map(name => staffBreakdown[name].total || 0);
+  const completed = names.map(name => staffBreakdown[name].completed || 0);
+
+  staffChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: names,
+      datasets: [
+        {
+          label: "Total",
+          data: totals
+        },
+        {
+          label: "Completed",
+          data: completed
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  });
+}
+
+function renderStaffPercentCards(staffBreakdown) {
+  const names = Object.keys(staffBreakdown);
+
+  if (!names.length) {
+    staffPercentGrid.innerHTML = `<div class="empty-percent">No data yet.</div>`;
+    return;
+  }
+
+  staffPercentGrid.innerHTML = names
+    .map((name) => {
+      const total = Number(staffBreakdown[name].total || 0);
+      const completed = Number(staffBreakdown[name].completed || 0);
+      const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+      return `
+        <div class="percent-card">
+          <div class="percent-name">${escapeHtml(name)}</div>
+          <div class="percent-meta">
+            <span>${completed} / ${total} completed</span>
+            <span>${percent}%</span>
+          </div>
+          <div class="percent-bar">
+            <div class="percent-fill" style="width: ${percent}%"></div>
+          </div>
+          <div class="percent-value">${percent}%</div>
+        </div>
+      `;
+    })
+    .join("");
 }
 
 function readExcelFile(file) {
@@ -346,6 +519,12 @@ async function loadStaffTasks() {
   if (!currentUser || currentUser.role === "Admin") return;
 
   refreshTasksBtn.disabled = true;
+
+  // 🔥 CLEAR UI FIRST (fix glitch)
+  currentTasks = [];
+  taskTableBody.innerHTML = `<tr><td colspan="8" class="empty-cell">Loading...</td></tr>`;
+  taskCount.textContent = "0 Tasks";
+
   setMessage(staffMsg, "Loading tasks...", "info");
 
   try {
@@ -354,9 +533,21 @@ async function loadStaffTasks() {
       code: currentUser.code
     });
 
-    currentTasks = Array.isArray(res.data) ? res.data : [];
+    // 🔥 SAFETY: ensure array
+    let data = Array.isArray(res.data) ? res.data : [];
+
+    // 🔥 IMPORTANT FIX: only latest batch
+    const latestBatch = data.length ? data[0].batchId : null;
+    if (latestBatch) {
+      data = data.filter(t => t.batchId === latestBatch);
+    }
+
+    currentTasks = data;
+
     renderTasks();
+
     setMessage(staffMsg, `Loaded ${currentTasks.length} tasks.`, "success");
+
   } catch (err) {
     console.error("Load tasks error:", err);
     setMessage(staffMsg, `Failed to load tasks: ${err.message}`, "error");
@@ -369,55 +560,47 @@ function renderTasks() {
   const q = searchInput.value.trim().toLowerCase();
   const filterStatus = statusFilter.value;
 
+  const pendingCount = currentTasks.filter((task) => String(task.status || "").trim() === "Pending").length;
+  taskCount.textContent = `${pendingCount} Tasks`;
+
   const filtered = currentTasks.filter((task) => {
-    const matchesSearch =
-      !q ||
-      String(task.brandName || "").toLowerCase().includes(q) ||
-      String(task.username || "").toLowerCase().includes(q) ||
-      String(task.email || "").toLowerCase().includes(q) ||
-      String(task.phone || "").toLowerCase().includes(q);
-
-    const matchesStatus = !filterStatus || task.status === filterStatus;
-
-    return matchesSearch && matchesStatus;
+    return (
+      (!q ||
+        String(task.brandName || "").toLowerCase().includes(q) ||
+        String(task.username || "").toLowerCase().includes(q) ||
+        String(task.email || "").toLowerCase().includes(q) ||
+        String(task.phone || "").toLowerCase().includes(q)) &&
+      (!filterStatus || task.status === filterStatus)
+    );
   });
 
-  taskCount.textContent = `${filtered.length} Tasks`;
-
   if (!filtered.length) {
-    taskTableBody.innerHTML = `<tr><td colspan="8" class="empty-cell">No matching tasks found.</td></tr>`;
+    taskTableBody.innerHTML = `<tr><td colspan="8" class="empty-cell">No tasks found.</td></tr>`;
     return;
   }
 
-  taskTableBody.innerHTML = filtered
-    .map((task) => {
-      const statusOptions = STATUS_OPTIONS.map(
-        (status) =>
-          `<option value="${escapeHtml(status)}" ${task.status === status ? "selected" : ""}>${escapeHtml(status)}</option>`
-      ).join("");
-
-      return `
-        <tr>
-          <td>${escapeHtml(task.brandName || "")}</td>
-          <td>${escapeHtml(task.username || "")}</td>
-          <td>${escapeHtml(task.email || "")}</td>
-          <td>${escapeHtml(task.regTime || "")}</td>
-          <td>${escapeHtml(task.phone || "")}</td>
-          <td>
-            <select class="status-select" data-task-id="${escapeHtml(task.id)}">
-              ${statusOptions}
-            </select>
-          </td>
-          <td>
-            <textarea class="remark-input" data-task-id="${escapeHtml(task.id)}" placeholder="Enter note...">${escapeHtml(task.remark || "")}</textarea>
-          </td>
-          <td>
-            <button class="save-btn" onclick="saveTask('${escapeJs(task.id)}', this)">Save</button>
-          </td>
-        </tr>
-      `;
-    })
-    .join("");
+  taskTableBody.innerHTML = filtered.map(task => `
+    <tr>
+      <td>${escapeHtml(task.brandName || "")}</td>
+      <td>${escapeHtml(task.username || "")}</td>
+      <td>${escapeHtml(task.email || "")}</td>
+      <td>${escapeHtml(task.regTime || "")}</td>
+      <td>${escapeHtml(task.phone || "")}</td>
+      <td>
+        <select class="status-select" data-task-id="${task.id}">
+          ${STATUS_OPTIONS.map(s =>
+            `<option ${task.status === s ? "selected" : ""}>${s}</option>`
+          ).join("")}
+        </select>
+      </td>
+      <td>
+        <textarea class="remark-input" data-task-id="${task.id}">${task.remark || ""}</textarea>
+      </td>
+      <td>
+        <button class="save-btn" onclick="saveTask('${task.id}', this)">Save</button>
+      </td>
+    </tr>
+  `).join("");
 }
 
 async function saveTask(taskId, btn) {
@@ -447,6 +630,7 @@ async function saveTask(taskId, btn) {
         task.status = status;
         task.remark = remark;
       }
+      renderTasks();
       setMessage(staffMsg, "Task updated successfully.", "success");
     } else {
       setMessage(staffMsg, res.error || "Update failed.", "error");
