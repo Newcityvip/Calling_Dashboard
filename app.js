@@ -1,4 +1,4 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbyBdtI6VnZmsLfo9KT0QfmEuMWREhlKkvZJXl8vyVdXhqxcWqtEUgLKV8SOrev1s3xgXA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxFZK6u-Kr78WGTLV4fQAjPVdrk_ze3N8FeW4kxZf2cT9b1yLi9v38sPyFymoI30fRlUg/exec";
 
 const STATUS_OPTIONS = [
   "Pending",
@@ -62,6 +62,10 @@ const searchInput = document.getElementById("searchInput");
 const statusFilter = document.getElementById("statusFilter");
 const refreshTasksBtn = document.getElementById("refreshTasksBtn");
 
+const targetStaffList = document.getElementById("targetStaffList");
+const selectAllTargetStaffBtn = document.getElementById("selectAllTargetStaffBtn");
+const clearTargetStaffBtn = document.getElementById("clearTargetStaffBtn");
+
 loginBtn.addEventListener("click", handleLogin);
 logoutBtn.addEventListener("click", logout);
 processBtn.addEventListener("click", handleUploadAndDistribute);
@@ -71,6 +75,9 @@ refreshSummaryBtn.addEventListener("click", loadAdminSummary);
 refreshTasksBtn.addEventListener("click", loadStaffTasks);
 searchInput.addEventListener("input", renderTasks);
 statusFilter.addEventListener("change", renderTasks);
+teamGroupSelect.addEventListener("change", renderTargetStaffOptions);
+selectAllTargetStaffBtn.addEventListener("click", selectAllTargetStaff);
+clearTargetStaffBtn.addEventListener("click", clearTargetStaffSelection);
 
 staffCodeInput.addEventListener("keypress", function (e) {
   if (e.key === "Enter") handleLogin();
@@ -135,6 +142,7 @@ function logout() {
   clearBatchIdInput.value = "";
   excelFileInput.value = "";
   brandNameInput.value = "";
+  if (targetStaffList) targetStaffList.innerHTML = `<div class="target-staff-empty">Select a team group to load staff.</div>`;
   staffPercentGrid.innerHTML = `<div class="empty-percent">No data yet.</div>`;
 
   if (statusChart) {
@@ -181,6 +189,7 @@ async function handleLogin() {
     if (res.role === "Admin") {
       adminName.textContent = `${res.name} (${code})`;
       showView(adminView);
+      await renderTargetStaffOptions();
       await loadAdminSummary();
     } else {
       staffTitle.textContent = `${res.name} - My Assigned Tasks`;
@@ -201,6 +210,7 @@ async function handleUploadAndDistribute() {
   const file = excelFileInput.files[0];
   const group = teamGroupSelect.value;
   const brandName = brandNameInput.value.trim();
+  const selectedStaffCodes = getSelectedTargetStaffCodes();
 
   if (!brandName) {
     setMessage(uploadMsg, "Please enter the brand name.", "error");
@@ -231,6 +241,7 @@ async function handleUploadAndDistribute() {
       code: currentUser.code,
       group,
       brandName,
+      selectedStaffCodes,
       fileName: file.name,
       records
     });
@@ -243,6 +254,7 @@ async function handleUploadAndDistribute() {
         uploadMsg,
         `Upload complete.
 Brand: ${res.brandName}
+Distributed to: ${selectedStaffCodes.length ? selectedStaffCodes.join(", ") : "All selected team staff"}
 Total rows: ${res.total}
 After duplicate cleanup: ${res.cleaned}
 Duplicates removed: ${res.duplicatesRemoved}
@@ -449,6 +461,58 @@ function renderStaffPercentCards(staffBreakdown) {
     .join("");
 }
 
+
+async function renderTargetStaffOptions() {
+  if (!targetStaffList) return;
+
+  const group = teamGroupSelect.value;
+  targetStaffList.innerHTML = `<div class="target-staff-empty">Loading staff...</div>`;
+
+  try {
+    const res = await postData({
+      action: "getStaffOptions",
+      code: currentUser ? currentUser.code : "",
+      group
+    });
+
+    const staff = Array.isArray(res.staff) ? res.staff : [];
+
+    if (!staff.length) {
+      targetStaffList.innerHTML = `<div class="target-staff-empty">No active staff found for this group.</div>`;
+      return;
+    }
+
+    targetStaffList.innerHTML = staff.map((member) => `
+      <label class="target-staff-item">
+        <input type="checkbox" class="target-staff-checkbox" value="${escapeHtml(member.code)}" />
+        <span>${escapeHtml(member.name)} (${escapeHtml(member.code)})</span>
+      </label>
+    `).join("");
+  } catch (err) {
+    console.error("Target staff load error:", err);
+    targetStaffList.innerHTML = `<div class="target-staff-empty">Could not load staff list.</div>`;
+  }
+}
+
+function getSelectedTargetStaffCodes() {
+  return Array.from(document.querySelectorAll(".target-staff-checkbox:checked"))
+    .map((el) => String(el.value || "").trim())
+    .filter(Boolean);
+}
+
+function selectAllTargetStaff() {
+  document.querySelectorAll(".target-staff-checkbox").forEach((el) => {
+    el.checked = true;
+  });
+}
+
+function clearTargetStaffSelection() {
+  document.querySelectorAll(".target-staff-checkbox").forEach((el) => {
+    el.checked = false;
+  });
+}
+
+
 function readExcelFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -519,12 +583,6 @@ async function loadStaffTasks() {
   if (!currentUser || currentUser.role === "Admin") return;
 
   refreshTasksBtn.disabled = true;
-
-  // 🔥 CLEAR UI FIRST (fix glitch)
-  currentTasks = [];
-  taskTableBody.innerHTML = `<tr><td colspan="8" class="empty-cell">Loading...</td></tr>`;
-  taskCount.textContent = "0 Tasks";
-
   setMessage(staffMsg, "Loading tasks...", "info");
 
   try {
@@ -533,21 +591,9 @@ async function loadStaffTasks() {
       code: currentUser.code
     });
 
-    // 🔥 SAFETY: ensure array
-    let data = Array.isArray(res.data) ? res.data : [];
-
-    // 🔥 IMPORTANT FIX: only latest batch
-    const latestBatch = data.length ? data[0].batchId : null;
-    if (latestBatch) {
-      data = data.filter(t => t.batchId === latestBatch);
-    }
-
-    currentTasks = data;
-
+    currentTasks = Array.isArray(res.data) ? res.data : [];
     renderTasks();
-
     setMessage(staffMsg, `Loaded ${currentTasks.length} tasks.`, "success");
-
   } catch (err) {
     console.error("Load tasks error:", err);
     setMessage(staffMsg, `Failed to load tasks: ${err.message}`, "error");
@@ -560,47 +606,55 @@ function renderTasks() {
   const q = searchInput.value.trim().toLowerCase();
   const filterStatus = statusFilter.value;
 
-  const pendingCount = currentTasks.filter((task) => String(task.status || "").trim() === "Pending").length;
-  taskCount.textContent = `${pendingCount} Tasks`;
-
   const filtered = currentTasks.filter((task) => {
-    return (
-      (!q ||
-        String(task.brandName || "").toLowerCase().includes(q) ||
-        String(task.username || "").toLowerCase().includes(q) ||
-        String(task.email || "").toLowerCase().includes(q) ||
-        String(task.phone || "").toLowerCase().includes(q)) &&
-      (!filterStatus || task.status === filterStatus)
-    );
+    const matchesSearch =
+      !q ||
+      String(task.brandName || "").toLowerCase().includes(q) ||
+      String(task.username || "").toLowerCase().includes(q) ||
+      String(task.email || "").toLowerCase().includes(q) ||
+      String(task.phone || "").toLowerCase().includes(q);
+
+    const matchesStatus = !filterStatus || task.status === filterStatus;
+
+    return matchesSearch && matchesStatus;
   });
 
+  taskCount.textContent = `${filtered.length} Tasks`;
+
   if (!filtered.length) {
-    taskTableBody.innerHTML = `<tr><td colspan="8" class="empty-cell">No tasks found.</td></tr>`;
+    taskTableBody.innerHTML = `<tr><td colspan="8" class="empty-cell">No matching tasks found.</td></tr>`;
     return;
   }
 
-  taskTableBody.innerHTML = filtered.map(task => `
-    <tr>
-      <td>${escapeHtml(task.brandName || "")}</td>
-      <td>${escapeHtml(task.username || "")}</td>
-      <td>${escapeHtml(task.email || "")}</td>
-      <td>${escapeHtml(task.regTime || "")}</td>
-      <td>${escapeHtml(task.phone || "")}</td>
-      <td>
-        <select class="status-select" data-task-id="${task.id}">
-          ${STATUS_OPTIONS.map(s =>
-            `<option ${task.status === s ? "selected" : ""}>${s}</option>`
-          ).join("")}
-        </select>
-      </td>
-      <td>
-        <textarea class="remark-input" data-task-id="${task.id}">${task.remark || ""}</textarea>
-      </td>
-      <td>
-        <button class="save-btn" onclick="saveTask('${task.id}', this)">Save</button>
-      </td>
-    </tr>
-  `).join("");
+  taskTableBody.innerHTML = filtered
+    .map((task) => {
+      const statusOptions = STATUS_OPTIONS.map(
+        (status) =>
+          `<option value="${escapeHtml(status)}" ${task.status === status ? "selected" : ""}>${escapeHtml(status)}</option>`
+      ).join("");
+
+      return `
+        <tr>
+          <td>${escapeHtml(task.brandName || "")}</td>
+          <td>${escapeHtml(task.username || "")}</td>
+          <td>${escapeHtml(task.email || "")}</td>
+          <td>${escapeHtml(task.regTime || "")}</td>
+          <td>${escapeHtml(task.phone || "")}</td>
+          <td>
+            <select class="status-select" data-task-id="${escapeHtml(task.id)}">
+              ${statusOptions}
+            </select>
+          </td>
+          <td>
+            <textarea class="remark-input" data-task-id="${escapeHtml(task.id)}" placeholder="Enter note...">${escapeHtml(task.remark || "")}</textarea>
+          </td>
+          <td>
+            <button class="save-btn" onclick="saveTask('${escapeJs(task.id)}', this)">Save</button>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
 }
 
 async function saveTask(taskId, btn) {
@@ -630,7 +684,6 @@ async function saveTask(taskId, btn) {
         task.status = status;
         task.remark = remark;
       }
-      renderTasks();
       setMessage(staffMsg, "Task updated successfully.", "success");
     } else {
       setMessage(staffMsg, res.error || "Update failed.", "error");
