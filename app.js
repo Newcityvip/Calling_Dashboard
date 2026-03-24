@@ -1,4 +1,4 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbxFZK6u-Kr78WGTLV4fQAjPVdrk_ze3N8FeW4kxZf2cT9b1yLi9v38sPyFymoI30fRlUg/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbzXNFfkW4Pa2GQfwqTJCNwNv7-4RH4nceFxjEIIvfFv-NR_sRG9nPljIWYjTvI2Tjmn/exec";
 
 const STATUS_OPTIONS = [
   "Pending",
@@ -62,9 +62,18 @@ const searchInput = document.getElementById("searchInput");
 const statusFilter = document.getElementById("statusFilter");
 const refreshTasksBtn = document.getElementById("refreshTasksBtn");
 
-const targetStaffList = document.getElementById("targetStaffList");
-const selectAllTargetStaffBtn = document.getElementById("selectAllTargetStaffBtn");
-const clearTargetStaffBtn = document.getElementById("clearTargetStaffBtn");
+
+const emailModal = document.getElementById("emailModal");
+const emailModalBackdrop = document.getElementById("emailModalBackdrop");
+const closeEmailModalBtn = document.getElementById("closeEmailModalBtn");
+const cancelEmailBtn = document.getElementById("cancelEmailBtn");
+const sendEmailBtn = document.getElementById("sendEmailBtn");
+const emailToInput = document.getElementById("emailTo");
+const emailSubjectInput = document.getElementById("emailSubject");
+const emailBodyInput = document.getElementById("emailBody");
+const emailMsg = document.getElementById("emailMsg");
+
+let activeEmailTaskId = null;
 
 loginBtn.addEventListener("click", handleLogin);
 logoutBtn.addEventListener("click", logout);
@@ -75,9 +84,17 @@ refreshSummaryBtn.addEventListener("click", loadAdminSummary);
 refreshTasksBtn.addEventListener("click", loadStaffTasks);
 searchInput.addEventListener("input", renderTasks);
 statusFilter.addEventListener("change", renderTasks);
-teamGroupSelect.addEventListener("change", renderTargetStaffOptions);
-selectAllTargetStaffBtn.addEventListener("click", selectAllTargetStaff);
-clearTargetStaffBtn.addEventListener("click", clearTargetStaffSelection);
+
+if (closeEmailModalBtn) closeEmailModalBtn.addEventListener("click", closeEmailModal);
+if (cancelEmailBtn) cancelEmailBtn.addEventListener("click", closeEmailModal);
+if (emailModalBackdrop) emailModalBackdrop.addEventListener("click", closeEmailModal);
+if (sendEmailBtn) sendEmailBtn.addEventListener("click", handleSendEmail);
+
+window.addEventListener("keydown", function (e) {
+  if (e.key === "Escape" && emailModal && !emailModal.classList.contains("hidden")) {
+    closeEmailModal();
+  }
+});
 
 staffCodeInput.addEventListener("keypress", function (e) {
   if (e.key === "Enter") handleLogin();
@@ -142,7 +159,6 @@ function logout() {
   clearBatchIdInput.value = "";
   excelFileInput.value = "";
   brandNameInput.value = "";
-  if (targetStaffList) targetStaffList.innerHTML = `<div class="target-staff-empty">Select a team group to load staff.</div>`;
   staffPercentGrid.innerHTML = `<div class="empty-percent">No data yet.</div>`;
 
   if (statusChart) {
@@ -153,6 +169,8 @@ function logout() {
     staffChart.destroy();
     staffChart = null;
   }
+
+  closeEmailModal();
 }
 
 async function handleLogin() {
@@ -189,7 +207,6 @@ async function handleLogin() {
     if (res.role === "Admin") {
       adminName.textContent = `${res.name} (${code})`;
       showView(adminView);
-      await renderTargetStaffOptions();
       await loadAdminSummary();
     } else {
       staffTitle.textContent = `${res.name} - My Assigned Tasks`;
@@ -210,7 +227,6 @@ async function handleUploadAndDistribute() {
   const file = excelFileInput.files[0];
   const group = teamGroupSelect.value;
   const brandName = brandNameInput.value.trim();
-  const selectedStaffCodes = getSelectedTargetStaffCodes();
 
   if (!brandName) {
     setMessage(uploadMsg, "Please enter the brand name.", "error");
@@ -241,7 +257,6 @@ async function handleUploadAndDistribute() {
       code: currentUser.code,
       group,
       brandName,
-      selectedStaffCodes,
       fileName: file.name,
       records
     });
@@ -254,7 +269,6 @@ async function handleUploadAndDistribute() {
         uploadMsg,
         `Upload complete.
 Brand: ${res.brandName}
-Distributed to: ${selectedStaffCodes.length ? selectedStaffCodes.join(", ") : "All selected team staff"}
 Total rows: ${res.total}
 After duplicate cleanup: ${res.cleaned}
 Duplicates removed: ${res.duplicatesRemoved}
@@ -462,56 +476,83 @@ function renderStaffPercentCards(staffBreakdown) {
 }
 
 
-async function renderTargetStaffOptions() {
-  if (!targetStaffList) return;
+function getBrandFollowUpSubject(brandCode) {
+  const brandMap = {
+    M1: "মেগা ক্যাসিনো ওয়ার্ল্ড অ্যাফিলিয়েট কল ফলো-আপ ইমেইল",
+    M2: "মেগা ক্রিকেট ওয়ার্ল্ড অ্যাফিলিয়েট কল ফলো-আপ ইমেইল",
+    B1: "বাংলাবেট অ্যাফিলিয়েট কল ফলো-আপ ইমেইল",
+    B2: "বেঙ্গলবেট অ্যাফিলিয়েট কল ফলো-আপ ইমেইল",
+    B3: "দেশি স্লটস অ্যাফিলিয়েট কল ফলো-আপ ইমেইল",
+    B4: "বাংলাউইন অ্যাফিলিয়েট কল ফলো-আপ ইমেইল",
+    B5: "বাংলাপ্লাস অ্যাফিলিয়েট কল ফলো-আপ ইমেইল",
+    K1: "খেলাঘর অ্যাফিলিয়েট কল ফলো-আপ ইমেইল",
+    TK: "টিকেবাজি অ্যাফিলিয়েট কল ফলো-আপ ইমেইল",
+    JW: "জয়উইন৮৮ অ্যাফিলিয়েট কল ফলো-আপ ইমেইল"
+  };
+  const code = String(brandCode || "").trim().toUpperCase();
+  return brandMap[code] || `${String(brandCode || "").trim()} অ্যাফিলিয়েট কল ফলো-আপ ইমেইল`;
+}
 
-  const group = teamGroupSelect.value;
-  targetStaffList.innerHTML = `<div class="target-staff-empty">Loading staff...</div>`;
+function openEmailModal(taskId, email, brandName) {
+  activeEmailTaskId = taskId;
+  emailToInput.value = String(email || "").trim();
+  emailSubjectInput.value = getBrandFollowUpSubject(brandName || "");
+  emailBodyInput.value = "";
+  setMessage(emailMsg, "", "info");
+  emailModal.classList.remove("hidden");
+  emailToInput.focus();
+}
+
+function closeEmailModal() {
+  activeEmailTaskId = null;
+  if (emailToInput) emailToInput.value = "";
+  if (emailSubjectInput) emailSubjectInput.value = "";
+  if (emailBodyInput) emailBodyInput.value = "";
+  if (emailMsg) setMessage(emailMsg, "", "info");
+  if (emailModal) emailModal.classList.add("hidden");
+}
+
+async function handleSendEmail() {
+  if (!currentUser || !activeEmailTaskId) return;
+
+  const to = String(emailToInput.value || "").trim();
+  const subject = String(emailSubjectInput.value || "").trim();
+  const body = String(emailBodyInput.value || "").trim();
+
+  if (!to) {
+    setMessage(emailMsg, "Receiver email is missing.", "error");
+    return;
+  }
+  if (!body) {
+    setMessage(emailMsg, "Please paste or write the message body.", "error");
+    return;
+  }
+
+  sendEmailBtn.disabled = true;
+  setMessage(emailMsg, "Sending email...", "info");
 
   try {
     const res = await postData({
-      action: "getStaffOptions",
-      code: currentUser ? currentUser.code : "",
-      group
+      action: "sendFollowUpEmail",
+      code: currentUser.code,
+      to,
+      subject,
+      body
     });
 
-    const staff = Array.isArray(res.staff) ? res.staff : [];
-
-    if (!staff.length) {
-      targetStaffList.innerHTML = `<div class="target-staff-empty">No active staff found for this group.</div>`;
-      return;
+    if (res.success) {
+      setMessage(emailMsg, "Email sent successfully.", "success");
+      setTimeout(() => closeEmailModal(), 800);
+    } else {
+      setMessage(emailMsg, res.error || "Email sending failed.", "error");
     }
-
-    targetStaffList.innerHTML = staff.map((member) => `
-      <label class="target-staff-item">
-        <input type="checkbox" class="target-staff-checkbox" value="${escapeHtml(member.code)}" />
-        <span>${escapeHtml(member.name)} (${escapeHtml(member.code)})</span>
-      </label>
-    `).join("");
   } catch (err) {
-    console.error("Target staff load error:", err);
-    targetStaffList.innerHTML = `<div class="target-staff-empty">Could not load staff list.</div>`;
+    console.error("Send email error:", err);
+    setMessage(emailMsg, `Email sending failed: ${err.message}`, "error");
+  } finally {
+    sendEmailBtn.disabled = false;
   }
 }
-
-function getSelectedTargetStaffCodes() {
-  return Array.from(document.querySelectorAll(".target-staff-checkbox:checked"))
-    .map((el) => String(el.value || "").trim())
-    .filter(Boolean);
-}
-
-function selectAllTargetStaff() {
-  document.querySelectorAll(".target-staff-checkbox").forEach((el) => {
-    el.checked = true;
-  });
-}
-
-function clearTargetStaffSelection() {
-  document.querySelectorAll(".target-staff-checkbox").forEach((el) => {
-    el.checked = false;
-  });
-}
-
 
 function readExcelFile(file) {
   return new Promise((resolve, reject) => {
@@ -649,7 +690,10 @@ function renderTasks() {
             <textarea class="remark-input" data-task-id="${escapeHtml(task.id)}" placeholder="Enter note...">${escapeHtml(task.remark || "")}</textarea>
           </td>
           <td>
-            <button class="save-btn" onclick="saveTask('${escapeJs(task.id)}', this)">Save</button>
+            <div class="row-action-stack">
+              <button class="save-btn" onclick="saveTask('${escapeJs(task.id)}', this)">Save</button>
+              <button class="email-btn" onclick="openEmailModal('${escapeJs(task.id)}', '${escapeJs(task.email || '')}', '${escapeJs(task.brandName || '')}')">Send Email</button>
+            </div>
           </td>
         </tr>
       `;
