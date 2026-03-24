@@ -421,62 +421,13 @@ th {
   color: var(--muted);
 }
 
-
-.field-full {
-  grid-column: 1 / -1;
-}
-
-.small-text {
-  font-size: 12px;
-  margin: 0 0 8px;
-}
-
-.staff-target-actions {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-}
-
-.btn-small {
-  padding: 8px 12px;
-  font-size: 13px;
-}
-
-.target-staff-list {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-}
-
-.target-staff-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #f8fafc;
-}
-
-.target-staff-item input[type="checkbox"] {
-  width: auto;
-  margin: 0;
-}
-
-.target-staff-empty {
-  color: var(--muted);
-  font-size: 14px;
-}
-
 @media (max-width: 980px) {
   .grid.two-col,
   .form-grid,
   .toolbar,
   .stats-grid,
   .summary-grid,
-  .percent-grid,
-  .target-staff-list {
+  .percent-grid {
     grid-template-columns: 1fr;
   }
 
@@ -498,4 +449,69 @@ th {
   .staff-summary {
     text-align: left;
   }
+}
+
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.modal-card {
+  position: relative;
+  width: min(680px, calc(100vw - 32px));
+  margin: 60px auto;
+  background: #fff;
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.18);
+  border: 1px solid var(--border);
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.modal-head h3 {
+  margin: 0;
+}
+
+.modal-close {
+  border: none;
+  background: transparent;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.row-action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.email-btn {
+  background: var(--success);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.email-btn:hover {
+  background: var(--success-dark);
 }
