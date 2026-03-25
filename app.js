@@ -29,6 +29,8 @@ const adminName = document.getElementById("adminName");
 const processBtn = document.getElementById("processBtn");
 const teamGroupSelect = document.getElementById("teamGroup");
 const brandNameInput = document.getElementById("brandName");
+const targetStaffSelect = document.getElementById("targetStaffSelect");
+const targetStaffHelp = document.getElementById("targetStaffHelp");
 const excelFileInput = document.getElementById("excelFile");
 const uploadMsg = document.getElementById("uploadMsg");
 
@@ -84,6 +86,7 @@ refreshSummaryBtn.addEventListener("click", loadAdminSummary);
 refreshTasksBtn.addEventListener("click", loadStaffTasks);
 searchInput.addEventListener("input", renderTasks);
 statusFilter.addEventListener("change", renderTasks);
+if (teamGroupSelect) teamGroupSelect.addEventListener("change", loadStaffOptions);
 
 if (closeEmailModalBtn) closeEmailModalBtn.addEventListener("click", closeEmailModal);
 if (cancelEmailBtn) cancelEmailBtn.addEventListener("click", closeEmailModal);
@@ -159,6 +162,8 @@ function logout() {
   clearBatchIdInput.value = "";
   excelFileInput.value = "";
   brandNameInput.value = "";
+  if (targetStaffSelect) targetStaffSelect.innerHTML = "";
+  if (targetStaffHelp) targetStaffHelp.textContent = "";
   staffPercentGrid.innerHTML = `<div class="empty-percent">No data yet.</div>`;
 
   if (statusChart) {
@@ -207,6 +212,7 @@ async function handleLogin() {
     if (res.role === "Admin") {
       adminName.textContent = `${res.name} (${code})`;
       showView(adminView);
+      await loadStaffOptions();
       await loadAdminSummary();
     } else {
       staffTitle.textContent = `${res.name} - My Assigned Tasks`;
@@ -221,12 +227,51 @@ async function handleLogin() {
   }
 }
 
+
+async function loadStaffOptions() {
+  if (!currentUser || currentUser.role !== "Admin" || !teamGroupSelect || !targetStaffSelect) return;
+
+  const group = teamGroupSelect.value;
+  targetStaffSelect.innerHTML = "";
+  if (targetStaffHelp) targetStaffHelp.textContent = "Loading staff...";
+
+  try {
+    const res = await postData({
+      action: "getStaffOptions",
+      code: currentUser.code,
+      group
+    });
+
+    const staff = Array.isArray(res.staff) ? res.staff : [];
+    if (!staff.length) {
+      if (targetStaffHelp) targetStaffHelp.textContent = "No active staff found for this team.";
+      return;
+    }
+
+    targetStaffSelect.innerHTML = staff.map((s) => {
+      const code = escapeHtml(String(s.code || "").trim());
+      const name = escapeHtml(String(s.name || "").trim());
+      return `<option value="${code}">${name} (${code})</option>`;
+    }).join("");
+
+    if (targetStaffHelp) {
+      targetStaffHelp.textContent = "Optional: select one or multiple staff. Leave unselected to distribute equally to the full team.";
+    }
+  } catch (err) {
+    console.error("Load staff options error:", err);
+    if (targetStaffHelp) targetStaffHelp.textContent = "Failed to load staff list.";
+  }
+}
+
 async function handleUploadAndDistribute() {
   if (!currentUser || currentUser.role !== "Admin") return;
 
   const file = excelFileInput.files[0];
   const group = teamGroupSelect.value;
   const brandName = brandNameInput.value.trim();
+  const selectedStaffCodes = targetStaffSelect
+    ? Array.from(targetStaffSelect.selectedOptions).map((opt) => String(opt.value || "").trim()).filter(Boolean)
+    : [];
 
   if (!brandName) {
     setMessage(uploadMsg, "Please enter the brand name.", "error");
@@ -257,6 +302,7 @@ async function handleUploadAndDistribute() {
       code: currentUser.code,
       group,
       brandName,
+      selectedStaffCodes,
       fileName: file.name,
       records
     });
@@ -455,14 +501,15 @@ function renderStaffPercentCards(staffBreakdown) {
   staffPercentGrid.innerHTML = names
     .map((name) => {
       const total = Number(staffBreakdown[name].total || 0);
-      const completed = Number(staffBreakdown[name].completed || 0);
-      const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+      const pending = Number(staffBreakdown[name].pending || 0);
+      const called = Math.max(0, total - pending);
+      const percent = total > 0 ? Math.round((called / total) * 100) : 0;
 
       return `
         <div class="percent-card">
           <div class="percent-name">${escapeHtml(name)}</div>
           <div class="percent-meta">
-            <span>${completed} / ${total} completed</span>
+            <span>${called} / ${total} called</span>
             <span>${percent}%</span>
           </div>
           <div class="percent-bar">
