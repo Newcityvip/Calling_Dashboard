@@ -515,3 +515,14 @@ th {
 .email-btn:hover {
   background: var(--success-dark);
 }
+
+
+select[multiple] {
+  min-height: 130px;
+}
+
+small.muted {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+}
