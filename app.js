@@ -212,7 +212,9 @@ function logout() {
 }
 
 async function handleLogin(passedCode = "", isAutoRestore = false) {
-  const code = String(passedCode || staffCodeInput.value || "").trim().toUpperCase();
+  const code = typeof passedCode === "string"
+  ? passedCode.trim().toUpperCase()
+  : String(staffCodeInput.value || "").trim().toUpperCase();
 
   if (!code) {
     setMessage(loginMsg, "Please enter your staff code.", "error");
