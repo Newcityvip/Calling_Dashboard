@@ -15,6 +15,7 @@ let currentUser = null;
 let currentTasks = [];
 let statusChart = null;
 let staffChart = null;
+const SESSION_STORAGE_KEY = "call_dashboard_session_v1";
 
 const loginView = document.getElementById("loginView");
 const adminView = document.getElementById("adminView");
@@ -93,6 +94,47 @@ staffCodeInput.addEventListener("keypress", function (e) {
   if (e.key === "Enter") handleLogin();
 });
 
+document.addEventListener("DOMContentLoaded", restoreSession);
+
+function saveSession(user) {
+  try {
+    if (!user || !user.code) return;
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+      code: String(user.code || "").trim().toUpperCase()
+    }));
+  } catch (err) {
+    console.warn("Could not save session:", err);
+  }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch (err) {
+    console.warn("Could not clear session:", err);
+  }
+}
+
+async function restoreSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return;
+
+    const saved = JSON.parse(raw);
+    const savedCode = String((saved && saved.code) || "").trim().toUpperCase();
+    if (!savedCode) {
+      clearSession();
+      return;
+    }
+
+    staffCodeInput.value = savedCode;
+    await handleLogin(savedCode, true);
+  } catch (err) {
+    console.warn("Session restore failed:", err);
+    clearSession();
+  }
+}
+
 async function postData(payload) {
   const res = await fetch(API_URL, {
     method: "POST",
@@ -134,6 +176,7 @@ function showView(view) {
 }
 
 function logout() {
+    clearSession();
   currentUser = null;
   currentTasks = [];
   staffCodeInput.value = "";
@@ -168,16 +211,20 @@ function logout() {
   closeEmailModal();
 }
 
-async function handleLogin() {
-  const code = staffCodeInput.value.trim().toUpperCase();
+async function handleLogin(passedCode = "", isAutoRestore = false) {
+  const code = String(passedCode || staffCodeInput.value || "").trim().toUpperCase();
 
   if (!code) {
     setMessage(loginMsg, "Please enter your staff code.", "error");
     return;
   }
 
+  if (!isAutoRestore) {
+    staffCodeInput.value = code;
+  }
+
   loginBtn.disabled = true;
-  setMessage(loginMsg, "Logging in...", "info");
+  setMessage(loginMsg, isAutoRestore ? "Restoring session..." : "Logging in...", "info");
 
   try {
     const res = await postData({
@@ -186,6 +233,7 @@ async function handleLogin() {
     });
 
     if (!res.success) {
+      clearSession();
       setMessage(loginMsg, "Invalid or inactive staff code.", "error");
       return;
     }
@@ -197,7 +245,8 @@ async function handleLogin() {
       group: res.group
     };
 
-    setMessage(loginMsg, "Login successful.", "success");
+    saveSession(currentUser);
+    setMessage(loginMsg, isAutoRestore ? "Session restored." : "Login successful.", "success");
 
     if (res.role === "Admin") {
       adminName.textContent = `${res.name} (${code})`;
@@ -211,7 +260,12 @@ async function handleLogin() {
     }
   } catch (err) {
     console.error("Login error:", err);
-    setMessage(loginMsg, `Login failed: ${err.message}`, "error");
+    if (isAutoRestore) {
+      clearSession();
+      setMessage(loginMsg, "", "info");
+    } else {
+      setMessage(loginMsg, `Login failed: ${err.message}`, "error");
+    }
   } finally {
     loginBtn.disabled = false;
   }
